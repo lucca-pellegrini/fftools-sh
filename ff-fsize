@@ -1,0 +1,122 @@
+#!/usr/bin/env sh
+# Reduces file to specified size
+
+params="$(getopt                                                    \
+	-o v:,a:,f:,s:,p:,b:,V,x                                    \
+	-l video-codec:,audio-codec:,format:,size:,preset:,bitrate: \
+	-l audio-bitrate:,verbose,trace                             \
+	-n "$0" -- "$@"
+)"
+
+case $? in
+0)
+	;;
+127|126)
+	echo "Make sure you have util-linux installed" >&2
+	exit 1
+	;;
+*)
+	_usage >&2
+	exit 1
+esac
+
+eval set -- "$params"
+set -e
+
+unset BITRATE AB VERBOSE
+VC='libx265'
+PRESET='medium'
+AC='flac'
+FORMAT='matroska'
+SIZE='96000'
+
+while true; do
+	case "$1" in
+	-v|--video-codec)
+		VC="$2"
+		shift 2
+		;;
+	-a|--audio-codec)
+		AC="$2"
+		shift 2
+		;;
+	-f|--format)
+		FORMAT="$2"
+		shift 2
+		;;
+	-s|--size)
+		SIZE="$2"
+		shift 2
+		;;
+	-p|--preset)
+		PRESET="$2"
+		shift 2
+		;;
+	-b|--bitrate)
+		BITRATE="$2"
+		shift 2
+		;;
+	--audio-bitrate)
+		AB="-b:a $2"
+		shift 2
+		;;
+	-V|--verbose)
+		VERBOSE=1
+		shift
+		;;
+	-x|--trace)
+		set -x
+		shift
+		;;
+	--)
+		shift
+		break
+		;;
+	*)
+		exit 1
+	esac
+done
+
+INPUT="$1"
+shift
+
+if [ -f "$INPUT" ]; then
+	INPUT=file:"$INPUT"
+fi
+
+DURATION="$(ffprobe \
+	-i "$INPUT" -show_entries format=duration -v quiet -of csv="p=0")"
+BITRATE="$(printf '%sk' "$(printf '8*%s/%s\n' "$SIZE" "$DURATION" | bc -l)")"
+PASSLOGFILE="$(mktemp -ut ff-fsize.XXXXXXXXXX)"
+
+if [ "$VERBOSE" ]; then
+	(
+		printf '\n'
+		printf 'Video bitrate: %s\n' "$BITRATE"
+		printf 'Audio bitrate: %s\n' "$AB"
+		printf 'Video codec: %s\n' "$VC"
+		printf 'Preset: %s\n' "$PRESET"
+		printf 'Audio codec: %s\n' "$AC"
+		printf 'Format: %s\n' "$FORMAT"
+		printf 'Size: %s\n' "$SIZE"
+		printf '\n'
+		printf 'Duration: %s\n' "$DURATION"
+		printf 'Bitrate: %s\n' "$BITRATE"
+		printf 'Pass log file: %s\n' "$PASSLOGFILE"
+		printf '\n'
+	) >&2
+fi
+
+
+ffmpeg -hide_banner -i "$INPUT"                         \
+	-c:v "$VC" -b:v "$BITRATE"                      \
+	-preset "$PRESET"                               \
+	-pass 1 -passlogfile "$PASSLOGFILE" -an -f null \
+	/dev/null
+
+ffmpeg -hide_banner -i "$INPUT"                          \
+	-c:v "$VC" -b:v "$BITRATE"                       \
+	-c:a "$AC" $AB                                   \
+	-preset "$PRESET"                                \
+	-pass 2 -passlogfile "$PASSLOGFILE" -f "$FORMAT" \
+	"$@"

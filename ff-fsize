@@ -87,7 +87,9 @@ fi
 DURATION="$(ffprobe \
 	-i "$INPUT" -show_entries format=duration -v quiet -of csv="p=0")"
 BITRATE="$(printf '%sk' "$(printf '8*%s/%s\n' "$SIZE" "$DURATION" | bc -l)")"
-PASSLOGFILE="$(mktemp -ut ff-fsize.XXXXXXXXXX)"
+PASSLOGFILE="$(mktemp -up . -t ff-fsize.XXXXXXXXXX)"
+
+trap 'rm "$PASSLOGFILE"*.log' EXIT INT TERM HUP
 
 if [ "$VERBOSE" ]; then
 	(

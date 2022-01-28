@@ -1,10 +1,10 @@
 #!/usr/bin/env sh
 # Reduces file to specified size
 
-params="$(getopt                                                    \
-	-o v:,a:,f:,s:,p:,b:,V,x                                    \
-	-l video-codec:,audio-codec:,format:,size:,preset:,bitrate: \
-	-l audio-bitrate:,verbose,trace                             \
+params="$(getopt                                                           \
+	-o v:,a:,s:,p:,b:,V,x                                              \
+	-l video-codec:,audio-codec:,size:,preset:,bitrate:,audio-bitrate: \
+	-l verbose,trace                                                   \
 	-n "$0" -- "$@"
 )"
 
@@ -16,7 +16,6 @@ case $? in
 	exit 1
 	;;
 *)
-	_usage >&2
 	exit 1
 esac
 
@@ -25,9 +24,8 @@ set -e
 
 unset BITRATE AB VERBOSE
 VC='libx265'
+AC='copy'
 PRESET='medium'
-AC='flac'
-FORMAT='matroska'
 SIZE='96000'
 
 while true; do
@@ -38,10 +36,6 @@ while true; do
 		;;
 	-a|--audio-codec)
 		AC="$2"
-		shift 2
-		;;
-	-f|--format)
-		FORMAT="$2"
 		shift 2
 		;;
 	-s|--size)
@@ -57,7 +51,7 @@ while true; do
 		shift 2
 		;;
 	--audio-bitrate)
-		AB="-b:a $2"
+		AB="$2"
 		shift 2
 		;;
 	-V|--verbose)
@@ -85,22 +79,31 @@ if [ -f "$INPUT" ]; then
 fi
 
 DURATION="$(ffprobe \
-	-i "$INPUT" -show_entries format=duration -v quiet -of csv="p=0")"
-BITRATE="$(printf '%sk' "$(printf '8*%s/%s\n' "$SIZE" "$DURATION" | bc -l)")"
-PASSLOGFILE="$(mktemp -up . -t ff-fsize.XXXXXXXXXX)"
+	-i "$INPUT" -v quiet -show_entries format=duration -of csv="p=0")"
+BITRATE="$(printf '8*%s/%s\n' "$SIZE" "$DURATION" | bc -l)"
 
-trap 'rm "$PASSLOGFILE"*.log' EXIT INT TERM HUP
+if [ "$AB" ]; then
+	BITRATE="$(printf '%s-%s\n' "$BITRATE" "$AB" | bc -l)"
+else
+	ab="$(ffprobe -i "$INPUT" -v quiet -select_streams a -show_entries \
+		stream=bit_rate -of default=noprint_wrappers=1:nokey=1)"
+	if [ "$ab" ]; then
+		BITRATE="$(printf '%s-%s/1000\n' "$BITRATE" "$ab" | bc -l)"
+	fi
+fi
+
+PASSLOGFILE="$(mktemp -up . -t ff-fsize.XXXXXXXXXX)"
+trap 'rm "$PASSLOGFILE"-*.log*' EXIT INT TERM HUP
 
 if [ "$VERBOSE" ]; then
 	(
 		printf '\n'
-		printf 'Video bitrate: %s\n' "$BITRATE"
-		printf 'Audio bitrate: %s\n' "$AB"
+		printf 'Video bitrate: %sk\n' "$BITRATE"
+		printf 'Audio bitrate: %s\n' "${AB:-$ab}"
 		printf 'Video codec: %s\n' "$VC"
 		printf 'Preset: %s\n' "$PRESET"
 		printf 'Audio codec: %s\n' "$AC"
-		printf 'Format: %s\n' "$FORMAT"
-		printf 'Size: %s\n' "$SIZE"
+		printf 'Size: %sk\n' "$SIZE"
 		printf '\n'
 		printf 'Duration: %s\n' "$DURATION"
 		printf 'Bitrate: %s\n' "$BITRATE"
@@ -110,15 +113,20 @@ if [ "$VERBOSE" ]; then
 fi
 
 
-ffmpeg -hide_banner -i "$INPUT"                         \
-	-c:v "$VC" -b:v "$BITRATE"                      \
-	-preset "$PRESET"                               \
-	-pass 1 -passlogfile "$PASSLOGFILE" -an -f null \
+ffmpeg -hide_banner -i "$INPUT"                     \
+	-c:v "$VC" -b:v "${BITRATE}k"               \
+	-an                                         \
+	-preset "$PRESET"                           \
+	-pass 1 -passlogfile "$PASSLOGFILE" -f null \
 	/dev/null
 
-ffmpeg -hide_banner -i "$INPUT"                          \
-	-c:v "$VC" -b:v "$BITRATE"                       \
-	-c:a "$AC" $AB                                   \
-	-preset "$PRESET"                                \
-	-pass 2 -passlogfile "$PASSLOGFILE" -f "$FORMAT" \
+if [ "$AC" != copy ]; then
+	ABOPT="-b:a ${AB}k"
+fi
+
+ffmpeg -hide_banner -i "$INPUT"             \
+	-c:v "$VC" -b:v "${BITRATE}k"       \
+	-c:a "$AC" $ABOPT                   \
+	-preset "$PRESET"                   \
+	-pass 2 -passlogfile "$PASSLOGFILE" \
 	"$@"

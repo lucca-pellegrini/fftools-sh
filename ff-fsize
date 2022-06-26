@@ -22,7 +22,7 @@ esac
 eval set -- "$params"
 set -e
 
-unset BITRATE AB VERBOSE
+unset BITRATE AB
 VC='libx265'
 AC='copy'
 PRESET='medium'

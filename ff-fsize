@@ -114,7 +114,7 @@ fi
 
 set -x
 
-ffmpeg -hide_banner -i "$INPUT"                     \
+ffmpeg -nostdin -hide_banner -i "$INPUT"            \
 	-c:v "$VC" -b:v "${BITRATE}k"               \
 	-an                                         \
 	-preset "$PRESET"                           \
@@ -125,7 +125,7 @@ if [ "$AC" != copy ]; then
 	ABOPT="-b:a ${AB}k"
 fi
 
-ffmpeg -hide_banner -i "$INPUT"             \
+ffmpeg -nostdin -hide_banner -i "$INPUT"    \
 	-c:v "$VC" -b:v "${BITRATE}k"       \
 	-c:a "$AC" $ABOPT                   \
 	-preset "$PRESET"                   \

@@ -112,6 +112,7 @@ if [ "$VERBOSE" ]; then
 	) >&2
 fi
 
+set -x
 
 ffmpeg -hide_banner -i "$INPUT"                     \
 	-c:v "$VC" -b:v "${BITRATE}k"               \

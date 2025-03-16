@@ -20,7 +20,7 @@ ff-fsize [options] input_file [output_file]
 
 - `-v, --video-codec` : Set the video codec (default: `libx265`)
 - `-a, --audio-codec` : Set the audio codec (default: `copy`)
-- `-s, --size` : Target file size in bytes (default: `96000`)
+- `-s, --size` : Target file size in kilobytes (default: `96000`)
 - `-p, --preset` : Set the FFmpeg preset (default: `medium`)
 - `-b, --bitrate` : Set the video bitrate
 - `--audio-bitrate` : Set the audio bitrate
@@ -36,7 +36,7 @@ ff-fsize [options] input_file [output_file]
 ### Example
 
 ```sh
-ff-fsize -s 5000000 input.mp4 output.mp4
+ff-fsize -s 50000 input.mp4 output.mp4
 ```
 
 # License
